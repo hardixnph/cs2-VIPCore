@@ -1,5 +1,7 @@
 # Allows a VIP player to select weapons packages
 
+The menu is a WASD menu and requires [CS2MenuManager](https://github.com/schwarper/CS2MenuManager) to be installed on the server (`addons/counterstrikesharp/shared/CS2MenuManager/`). Keys and colors are configured in its `config.toml`.
+
 # Config
 
 ### in vip.json

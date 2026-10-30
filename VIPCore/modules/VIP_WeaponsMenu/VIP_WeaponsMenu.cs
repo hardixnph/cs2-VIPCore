@@ -2,8 +2,8 @@
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
-using CounterStrikeSharp.API.Modules.Menu;
 using CounterStrikeSharp.API.Modules.Utils;
+using CS2MenuManager.API.Menu;
 using System.Text.Json;
 using VipCoreApi;
 using VipCoreApi.Enums;
@@ -37,6 +37,7 @@ public class WeaponsMenu : VipFeature
 {
     private VipWeaponsMenu _weaponsMenu;
     private static CCSGameRules? _gameRules;
+    private const int MenuTimeSeconds = 15;
 
     private readonly Dictionary<int, Dictionary<CCSPlayerController, WeaponSelection>> _playerSelection = new();
 
@@ -103,7 +104,8 @@ public class WeaponsMenu : VipFeature
         if (!IsFeatureEnabled(player))
             return HookResult.Continue;
 
-        MenuManager.CloseActiveMenu(player);
+        CounterStrikeSharp.API.Modules.Menu.MenuManager.CloseActiveMenu(player);
+        CS2MenuManager.API.Class.MenuManager.CloseActiveMenu(player);
         Server.NextFrame(() => _weaponsMenu.AddTimer(1.0f, () => CreateMenu(player)));
 
         return HookResult.Continue;
@@ -152,14 +154,21 @@ public class WeaponsMenu : VipFeature
 
         if (weaponsSettings == null) return;
 
-        // Route through the VIPCore API so this menu honours the configured menu type (chat / center
-        // / Panorama) instead of being hard-locked to a chat menu.
-        var menu = Api.CreateMenu(GetTranslatedText("weaponsmenu.title"));
-        menu.ExitButton = true;
+        var round = GetActualRound();
+        var packages = (player.Team == CsTeam.Terrorist ? weaponsSettings.T : weaponsSettings.CT)
+            .Where(p => round >= p.Value.Round)
+            .ToList();
 
-        foreach (var package in player.Team == CsTeam.Terrorist ? weaponsSettings.T : weaponsSettings.CT)
+        if (packages.Count == 0) return;
+
+        var menu = new WasdMenu(GetTranslatedText("weaponsmenu.title"), _weaponsMenu)
         {
-            menu.AddMenuOption($"{GetTranslatedText("weaponsmenu.fromround", package.Value.Round)} {package.Key}", (_, _) =>
+            ExitButton = true
+        };
+
+        foreach (var package in packages)
+        {
+            menu.AddItem(package.Key, (_, _) =>
             {
                 if (!player.IsValid || !IsFeatureEnabled(player) || !player.PawnIsAlive || player.PlayerPawn.Value == null)
                     return;
@@ -191,29 +200,28 @@ public class WeaponsMenu : VipFeature
 
                 CreateSubMenu(player, package.Value);
 
-            }, GetActualRound() < package.Value.Round);
+            });
         }
 
-        menu.Open(player);
+        menu.Display(player, MenuTimeSeconds);
     }
 
     private void CreateSubMenu(CCSPlayerController player, WeaponSelection selection)
     {
-        var menu = Api.CreateMenu(GetTranslatedText("weaponsmenu.wanttosave"));
-        menu.PostSelectAction = PostSelectAction.Close;
+        var menu = new WasdMenu(GetTranslatedText("weaponsmenu.wanttosave"), _weaponsMenu);
 
-        menu.AddMenuOption(GetTranslatedText("weaponsmenu.wanttosave.yes"), (_, _) =>
+        menu.AddItem(GetTranslatedText("weaponsmenu.wanttosave.yes"), (_, _) =>
         {
             AddPlayerSelection(player, selection);
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.saved"));
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.resetinfo.info"));
         });
-        menu.AddMenuOption(GetTranslatedText("weaponsmenu.wanttosave.no"), (_, _) =>
+        menu.AddItem(GetTranslatedText("weaponsmenu.wanttosave.no"), (_, _) =>
         {
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.notsaved"));
         });
 
-        menu.Open(player);
+        menu.Display(player, MenuTimeSeconds);
     }
 
     private static int GetActualRound()
