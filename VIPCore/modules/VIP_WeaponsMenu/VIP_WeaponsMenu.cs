@@ -3,7 +3,8 @@ using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Capabilities;
 using CounterStrikeSharp.API.Modules.Commands;
 using CounterStrikeSharp.API.Modules.Utils;
-using CS2MenuManager.API.Menu;
+using MenuManager;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using VipCoreApi;
 using VipCoreApi.Enums;
@@ -14,8 +15,8 @@ public class VipWeaponsMenu : BasePlugin
 {
     public override string ModuleAuthor => "daffyy";
     public override string ModuleName => "[VIP] WeaponsMenu";
-    public override string ModuleVersion => "v2.0.0";
-    
+    public override string ModuleVersion => "v2.1.0";
+
     private WeaponsMenu? _weaponsMenu;
     private IVipCoreApi? _api;
 
@@ -24,7 +25,15 @@ public class VipWeaponsMenu : BasePlugin
         _api = IVipCoreApi.Capability.Get();
         if (_api == null) return;
 
-        _weaponsMenu = new WeaponsMenu(this, _api);
+        IMenuApi? menuApi = null;
+        try { menuApi = new PluginCapability<IMenuApi?>("menu:nfcore").Get(); } catch { }
+        if (menuApi == null)
+        {
+            Logger.LogError("MenuManagerCS2 (menu:nfcore) is not loaded, the weapons menu is disabled");
+            return;
+        }
+
+        _weaponsMenu = new WeaponsMenu(this, _api, menuApi);
     }
     
     public override void Unload(bool hotReload)
@@ -36,10 +45,13 @@ public class VipWeaponsMenu : BasePlugin
 public class WeaponsMenu : VipFeature
 {
     private VipWeaponsMenu _weaponsMenu;
+    private readonly IMenuApi _menuApi;
     private static CCSGameRules? _gameRules;
-    private const int MenuTimeSeconds = 15;
+    private const float MenuTimeSeconds = 15f;
 
     private readonly Dictionary<int, Dictionary<CCSPlayerController, WeaponSelection>> _playerSelection = new();
+    // bumped on every menu this module opens; the auto-close timer only closes a menu that is still the latest one
+    private readonly Dictionary<CCSPlayerController, int> _menuVersion = new();
 
     private readonly Dictionary<string, int> _grenadeIndex = new()
     {
@@ -51,9 +63,10 @@ public class WeaponsMenu : VipFeature
         ["hegrenade"] = 13
     };
 
-    public WeaponsMenu(VipWeaponsMenu weaponsMenu, IVipCoreApi api) : base("WeaponsMenu", api, FeatureType.Hide)
+    public WeaponsMenu(VipWeaponsMenu weaponsMenu, IVipCoreApi api, IMenuApi menuApi) : base("WeaponsMenu", api, FeatureType.Hide)
     {
         _weaponsMenu = weaponsMenu;
+        _menuApi = menuApi;
         _weaponsMenu.RegisterEventHandler<EventPlayerSpawn>(EventPlayerSpawn);
         _weaponsMenu.RegisterEventHandler<EventPlayerDisconnect>(EventPlayerDisconnect);
         _weaponsMenu.RegisterListener<Listeners.OnMapStart>(OnMapStart);
@@ -87,6 +100,7 @@ public class WeaponsMenu : VipFeature
             return HookResult.Continue;
 
         RemovePlayerSelection(player);
+        _menuVersion.Remove(player);
 
         return HookResult.Continue;
     }
@@ -104,8 +118,7 @@ public class WeaponsMenu : VipFeature
         if (!IsFeatureEnabled(player))
             return HookResult.Continue;
 
-        CounterStrikeSharp.API.Modules.Menu.MenuManager.CloseActiveMenu(player);
-        CS2MenuManager.API.Class.MenuManager.CloseActiveMenu(player);
+        _menuApi.CloseMenu(player);
         Server.NextFrame(() => _weaponsMenu.AddTimer(1.0f, () => CreateMenu(player)));
 
         return HookResult.Continue;
@@ -161,14 +174,12 @@ public class WeaponsMenu : VipFeature
 
         if (packages.Count == 0) return;
 
-        var menu = new WasdMenu(GetTranslatedText("weaponsmenu.title"), _weaponsMenu)
-        {
-            ExitButton = true
-        };
+        var menu = _menuApi.GetMenu(GetTranslatedText("weaponsmenu.title"));
+        menu.ExitButton = true;
 
         foreach (var package in packages)
         {
-            menu.AddItem(package.Key, (_, _) =>
+            menu.AddMenuOption(package.Key, (_, _) =>
             {
                 if (!player.IsValid || !IsFeatureEnabled(player) || !player.PawnIsAlive || player.PlayerPawn.Value == null)
                     return;
@@ -203,25 +214,49 @@ public class WeaponsMenu : VipFeature
             });
         }
 
-        menu.Display(player, MenuTimeSeconds);
+        OpenMenu(player, menu);
     }
 
     private void CreateSubMenu(CCSPlayerController player, WeaponSelection selection)
     {
-        var menu = new WasdMenu(GetTranslatedText("weaponsmenu.wanttosave"), _weaponsMenu);
+        var menu = _menuApi.GetMenu(GetTranslatedText("weaponsmenu.wanttosave"));
 
-        menu.AddItem(GetTranslatedText("weaponsmenu.wanttosave.yes"), (_, _) =>
+        menu.AddMenuOption(GetTranslatedText("weaponsmenu.wanttosave.yes"), (_, _) =>
         {
             AddPlayerSelection(player, selection);
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.saved"));
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.resetinfo.info"));
+            CloseMenu(player);
         });
-        menu.AddItem(GetTranslatedText("weaponsmenu.wanttosave.no"), (_, _) =>
+        menu.AddMenuOption(GetTranslatedText("weaponsmenu.wanttosave.no"), (_, _) =>
         {
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.notsaved"));
+            CloseMenu(player);
         });
 
-        menu.Display(player, MenuTimeSeconds);
+        OpenMenu(player, menu);
+    }
+
+    // MenuManagerCS2 menus have no timeout, so close ours after MenuTimeSeconds unless another of ours replaced it
+    private void OpenMenu(CCSPlayerController player, CounterStrikeSharp.API.Modules.Menu.IMenu menu)
+    {
+        var version = _menuVersion.GetValueOrDefault(player) + 1;
+        _menuVersion[player] = version;
+
+        menu.Open(player);
+
+        _weaponsMenu.AddTimer(MenuTimeSeconds, () =>
+        {
+            if (player.IsValid && _menuVersion.GetValueOrDefault(player) == version)
+                CloseMenu(player);
+        });
+    }
+
+    private void CloseMenu(CCSPlayerController player)
+    {
+        _menuVersion[player] = _menuVersion.GetValueOrDefault(player) + 1;
+        if (_menuApi.HasOpenedMenu(player))
+            _menuApi.CloseMenu(player);
     }
 
     private static int GetActualRound()

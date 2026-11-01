@@ -1,6 +1,6 @@
 # Allows a VIP player to select weapons packages
 
-The menu is a WASD menu and requires [CS2MenuManager](https://github.com/schwarper/CS2MenuManager) to be installed on the server (`addons/counterstrikesharp/shared/CS2MenuManager/`). Keys and colors are configured in its `config.toml`.
+The menu requires [MenuManagerCS2](https://github.com/NickFox007/MenuManagerCS2) to be installed on the server. The menu type (button/WASD, chat, center...) and its keys are set in MenuManagerCS2's config, players can pick their own type there too. Menus close after 15 seconds.
 
 # Config
 
