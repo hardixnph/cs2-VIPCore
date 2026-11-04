@@ -49,7 +49,10 @@ public class WeaponsMenu : VipFeature
     private static CCSGameRules? _gameRules;
     private const float MenuTimeSeconds = 15f;
 
-    private readonly Dictionary<int, Dictionary<CCSPlayerController, WeaponSelection>> _playerSelection = new();
+    // the saved package name is stored per team in VIPCore cookies, so it survives reconnects and map changes
+    private const string SelectionCookieT = "weaponsmenu_t";
+    private const string SelectionCookieCT = "weaponsmenu_ct";
+
     // bumped on every menu this module opens; the auto-close timer only closes a menu that is still the latest one
     private readonly Dictionary<CCSPlayerController, int> _menuVersion = new();
 
@@ -99,7 +102,6 @@ public class WeaponsMenu : VipFeature
         if (player == null || !player.IsValid || player.IsBot)
             return HookResult.Continue;
 
-        RemovePlayerSelection(player);
         _menuVersion.Remove(player);
 
         return HookResult.Continue;
@@ -129,7 +131,14 @@ public class WeaponsMenu : VipFeature
         if (!player.PawnIsAlive || player.PlayerPawn.Value == null || player.Connected != PlayerConnectedState.Connected)
             return;
 
-        if (GetPlayerSelection(player, out var selection) && selection != null)
+        var json = GetFeatureValue<JsonElement>(player).GetRawText();
+        var weaponsSettings = JsonSerializer.Deserialize<WeaponsMenuSettings>(json);
+
+        if (weaponsSettings == null) return;
+
+        var teamPackages = player.Team == CsTeam.Terrorist ? weaponsSettings.T : weaponsSettings.CT;
+
+        if (GetPlayerSelection(player, teamPackages, out var selection) && selection != null)
         {
             if (GetActualRound() < selection.Round)
                 return;
@@ -162,13 +171,8 @@ public class WeaponsMenu : VipFeature
             return;
         }
 
-        var json = GetFeatureValue<JsonElement>(player).GetRawText();
-        var weaponsSettings = JsonSerializer.Deserialize<WeaponsMenuSettings>(json);
-
-        if (weaponsSettings == null) return;
-
         var round = GetActualRound();
-        var packages = (player.Team == CsTeam.Terrorist ? weaponsSettings.T : weaponsSettings.CT)
+        var packages = teamPackages
             .Where(p => round >= p.Value.Round)
             .ToList();
 
@@ -209,7 +213,7 @@ public class WeaponsMenu : VipFeature
                     }
                 });
 
-                CreateSubMenu(player, package.Value);
+                CreateSubMenu(player, package.Key);
 
             });
         }
@@ -217,13 +221,13 @@ public class WeaponsMenu : VipFeature
         OpenMenu(player, menu);
     }
 
-    private void CreateSubMenu(CCSPlayerController player, WeaponSelection selection)
+    private void CreateSubMenu(CCSPlayerController player, string packageName)
     {
         var menu = _menuApi.GetMenu(GetTranslatedText("weaponsmenu.wanttosave"));
 
         menu.AddMenuOption(GetTranslatedText("weaponsmenu.wanttosave.yes"), (_, _) =>
         {
-            AddPlayerSelection(player, selection);
+            AddPlayerSelection(player, packageName);
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.saved"));
             Api.PrintToChat(player, GetTranslatedText("weaponsmenu.resetinfo.info"));
             CloseMenu(player);
@@ -264,53 +268,41 @@ public class WeaponsMenu : VipFeature
         return _gameRules?.RoundsPlayedThisPhase + 1 ?? 1;
     }
     
-    private bool GetPlayerSelection(CCSPlayerController player, out WeaponSelection? selection)
+    private static string? GetSelectionCookie(CCSPlayerController player) => player.Team switch
     {
-        if (!_playerSelection.TryGetValue(player.TeamNum, out var playerDict))
-        {
-            selection = null;
-            return false;
-        }
+        CsTeam.Terrorist => SelectionCookieT,
+        CsTeam.CounterTerrorist => SelectionCookieCT,
+        _ => null
+    };
 
-        if (playerDict.TryGetValue(player, out var weaponSelection))
-        {
-            selection = weaponSelection;
-            return true;
-        }
-
+    private bool GetPlayerSelection(CCSPlayerController player, Dictionary<string, WeaponSelection> packages,
+        out WeaponSelection? selection)
+    {
         selection = null;
-        return false;
-    }
-    
-    private void AddPlayerSelection(CCSPlayerController player, WeaponSelection selection)
-    {
-        if (!_playerSelection.TryGetValue(player.TeamNum, out var value))
-        {
-            value = [];
-            _playerSelection[player.TeamNum] = value;
-        }
 
-        value[player] = selection;
+        var cookie = GetSelectionCookie(player);
+        if (cookie == null)
+            return false;
+
+        var packageName = GetPlayerCookie<string>(player, cookie);
+        if (string.IsNullOrEmpty(packageName))
+            return false;
+
+        // the package may have been removed from vip.json since it was saved
+        return packages.TryGetValue(packageName, out selection);
     }
-    
+
+    private void AddPlayerSelection(CCSPlayerController player, string packageName)
+    {
+        var cookie = GetSelectionCookie(player);
+        if (cookie != null)
+            SetPlayerCookie(player, cookie, packageName);
+    }
+
     private void RemovePlayerSelection(CCSPlayerController player)
     {
-        // Collect team numbers that need to be removed after the player is removed
-        var teamsToRemove = new List<int>();
-
-        foreach (var teamEntry in _playerSelection)
-        {
-            var teamNum = teamEntry.Key;
-            var playerDict = teamEntry.Value;
-
-            playerDict.Remove(player);
-
-            if (playerDict.Count == 0)
-                teamsToRemove.Add(teamNum);
-        }
-
-        foreach (var teamNum in teamsToRemove)
-            _playerSelection.Remove(teamNum);
+        SetPlayerCookie(player, SelectionCookieT, string.Empty);
+        SetPlayerCookie(player, SelectionCookieCT, string.Empty);
     }
 
     private static void RemoveWeapons(CCSPlayerController player)
