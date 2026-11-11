@@ -15,6 +15,12 @@ public class VipConfig
     public string[] DisableOnPistolRound { get; init; } = ["Items", "Grenades"];
     public bool VipLogging { get; init; } = true;
 
+    /// <summary>
+    /// Player commands to leave out, e.g. ["vip"] when another plugin's menu provides !vip.
+    /// "vip" = css_vip, "vip_admin" = css_vip_admin and css_admin_vip. Read when the plugin loads.
+    /// </summary>
+    public string[] DisabledCommands { get; init; } = [];
+
     public VipConnection Connection { get; init; } = new()
     {
         Host = "HOST",

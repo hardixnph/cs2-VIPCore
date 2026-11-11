@@ -19,6 +19,8 @@ public class VIP_NightVipConfig
     public string PluginEndTime { get; set; } = "08:00:00";
     public string Timezone { get; set; } = "UTC";
     public int CheckTimer { get; set; } = 10;
+    /// <summary>Chat line when Night VIP is given. false (or an empty VipGrantedMessage) = no message.</summary>
+    public bool ShowGrantedMessage { get; set; } = true;
     public string VipGrantedMessage { get; set; } = "You are receiving VIP because it's VIP Night time.";
     public string Tag { get; set; } = "[NightVIP]";
     public bool Debug { get; set; } = false;
@@ -29,7 +31,7 @@ public class VIP_NightVip : BasePlugin
 {
     public override string ModuleAuthor => "panda.";
     public override string ModuleName => "[VIP] Night VIP";
-    public override string ModuleVersion => "v2.0.0";
+    public override string ModuleVersion => "v2.0.1";
     public override string ModuleDescription => "Gives VIP between a certain period of time.";
 
     private IVipCoreApi? _api;
@@ -138,6 +140,7 @@ public class VIP_NightVip : BasePlugin
         ForceLogInfo($"  PluginEndTime: {Config.PluginEndTime}");
         ForceLogInfo($"  Timezone: {Config.Timezone}");
         ForceLogInfo($"  CheckTimer: {Config.CheckTimer}");
+        ForceLogInfo($"  ShowGrantedMessage: {Config.ShowGrantedMessage}");
         ForceLogInfo($"  VipGrantedMessage: {Config.VipGrantedMessage}");
         ForceLogInfo($"  Tag: {Config.Tag}");
         ForceLogInfo($"  Debug: {Config.Debug}");
@@ -185,7 +188,8 @@ public class VIP_NightVip : BasePlugin
 
         var remainingMinutes = CalculateRemainingVipTimeMinutes(_endTime, now);
         _api.GivePlayerTemporaryVip(player, Config.VIPGroup, remainingMinutes);
-        _api.PrintToChat(player, $" \x02{Config.Tag} \x01{Config.VipGrantedMessage}");
+        if (Config.ShowGrantedMessage && !string.IsNullOrWhiteSpace(Config.VipGrantedMessage))
+            _api.PrintToChat(player, $" \x02{Config.Tag} \x01{Config.VipGrantedMessage}");
 
         LogInfo($"Gave temporary VIP ({Config.VIPGroup}) to {player?.PlayerName} for {remainingMinutes} minutes.");
     }
@@ -238,6 +242,7 @@ public class VIP_NightVip : BasePlugin
             PluginEndTime = "08:00:00",
             Timezone = "UTC",
             CheckTimer = 10,
+            ShowGrantedMessage = true,
             VipGrantedMessage = "You are receiving VIP because it's VIP Night time.",
             Tag = "[NightVIP]",
             Debug = false

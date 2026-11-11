@@ -1,4 +1,4 @@
-![Static Badge](https://img.shields.io/badge/ver-2.0.0-darkgreen)
+![Static Badge](https://img.shields.io/badge/ver-2.0.1-darkgreen)
 
 ## `[VIP] Night VIP`
 Gives players a temporary VIP group during a specific time window (for example at night).
@@ -22,11 +22,14 @@ With `TimeMode` 0 (seconds) the VIP expires almost immediately.
   "PluginEndTime": "08:00:00",
   "Timezone": "UTC",
   "CheckTimer": 10,
+  "ShowGrantedMessage": true,
   "VipGrantedMessage": "You are receiving VIP because it's VIP Night time.",
   "Tag": "[NightVIP]",
   "Debug": false
 }
 ```
+
+`ShowGrantedMessage`: `false` (or an empty `VipGrantedMessage`) gives the VIP without the chat line.
 
 `VIPGroup` - VIP group from `vip.json` that is given
 

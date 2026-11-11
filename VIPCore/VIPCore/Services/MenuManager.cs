@@ -44,12 +44,26 @@ public class MenuManager
 
         LoadSortOrder();
 
-        plugin.AddCommand("css_vip", "command that opens the VIP MENU", (player, _) => OpenVipMenu(player));
-        plugin.AddCommand("css_vip_admin", "opens the VIP admin menu", OnAdminMenuCommand);
-        plugin.AddCommand("css_admin_vip", "opens the VIP admin menu", OnAdminMenuCommand);
+        if (!IsDisabled("vip"))
+            plugin.AddCommand("css_vip", "command that opens the VIP MENU", (player, _) => OpenVipMenu(player));
+
+        if (!IsDisabled("vip_admin"))
+        {
+            plugin.AddCommand("css_vip_admin", "opens the VIP admin menu", OnAdminMenuCommand);
+            plugin.AddCommand("css_admin_vip", "opens the VIP admin menu", OnAdminMenuCommand);
+        }
         plugin.AddCommandListener("say", OnSayCommand);
         plugin.AddCommandListener("say_team", OnSayCommand);
     }
+
+    /// <summary>vip_core.json DisabledCommands; accepts "vip", "!vip" or "css_vip".</summary>
+    private bool IsDisabled(string command) =>
+        (_coreConfig.Value.DisabledCommands ?? []).Any(c =>
+        {
+            var name = c.Trim().TrimStart('!', '/');
+            if (name.StartsWith("css_", StringComparison.OrdinalIgnoreCase)) name = name[4..];
+            return string.Equals(name, command, StringComparison.OrdinalIgnoreCase);
+        });
 
     public void LoadSortOrder()
     {

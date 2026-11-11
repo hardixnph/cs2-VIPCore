@@ -42,6 +42,7 @@ Configs from VIPCore 1.x are converted on the first start: groups are taken out 
 | `AdminMenuPermission` | `["@css/root"]` | Permissions needed for `css_vip_admin` |
 | `DisableOnPistolRound` | `["Items"]` | Features that do not work in pistol rounds (first round and first round after the side switch) |
 | `VipLogging` | `true` | Log VIPCore actions |
+| `DisabledCommands` | `[]` | Player commands to leave out: `"vip"` (`css_vip`) and/or `"vip_admin"` (`css_vip_admin`, `css_admin_vip`), e.g. when another plugin's menu provides `!vip`. Read when the plugin loads |
 | `Connection` | | MySQL connection |
 
 ```json
